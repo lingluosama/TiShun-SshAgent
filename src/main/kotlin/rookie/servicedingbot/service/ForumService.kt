@@ -12,5 +12,5 @@ interface ForumService: IService<ForumAccount> {
 
     suspend fun sign(client: OkHttpClient): Boolean
 
-
+    suspend fun addAccount(account: ForumAccount): Boolean
 }

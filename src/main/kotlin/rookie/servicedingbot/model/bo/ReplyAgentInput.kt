@@ -1,0 +1,14 @@
+package rookie.servicedingbot.model.bo
+
+data class ReplyAgentInput(
+    //用户原始消息
+    var originalMessage: String,
+
+    //经历的执行链
+    val executionChain: List<String>,
+    //需求执行结果
+    val processDescription: String,
+
+    val isSampleChat: Boolean
+
+)

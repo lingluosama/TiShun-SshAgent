@@ -16,7 +16,7 @@ class JsonConfig {
             // 允许非严格模式下的 JSON 解析，例如允许未加引号的字段名
             isLenient = true
 
-            // 格式化输出
+            // 格式化toString输出
              prettyPrint = true
 
             // 默认值是否包含在序列化输出中。

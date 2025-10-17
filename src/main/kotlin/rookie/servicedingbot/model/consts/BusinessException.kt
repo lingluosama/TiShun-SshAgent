@@ -14,4 +14,5 @@ class BusinessException(
 
     constructor(exception: Exception,message: String?=null) : this(500, message?:exception.message, exception)
 
+    constructor(message: String): this(500, message)
 }

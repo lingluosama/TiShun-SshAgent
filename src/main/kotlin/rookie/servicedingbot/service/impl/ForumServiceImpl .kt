@@ -10,9 +10,11 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.java.net.cookiejar.JavaNetCookieJar
 import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -24,6 +26,8 @@ import rookie.servicedingbot.service.ForumService
 import rookie.servicedingbot.utils.SimpleMessageSender
 import java.io.InputStream
 import rookie.servicedingbot.model.entity.table.ForumAccountTableDef.FORUM_ACCOUNT
+import java.net.CookieManager
+import java.net.CookiePolicy
 import java.util.concurrent.atomic.AtomicInteger
 
 @Service
@@ -87,8 +91,15 @@ class ForumServiceImpl(
     }
 
     override suspend fun login(username: String, password: String): OkHttpClient {
+
+        //创建独立的cookieJar
+        val cookieManager = CookieManager()
+        cookieManager.setCookiePolicy ( CookiePolicy.ACCEPT_ALL )
+        val isolatedCookieJar= JavaNetCookieJar(cookieManager)
+
+
         val session = okHttpClient.newBuilder()
-            .cookieJar(okHttpClient.cookieJar)
+            .cookieJar(isolatedCookieJar)
             .build()
 
         val pageReq = Request.Builder()
@@ -108,17 +119,17 @@ class ForumServiceImpl(
             }
         }
 
-        val jsonObject= buildJsonObject {
-            put("fastloginfield","username")
-            put("username",username)
-            put("password",password)
-            put("formhash",formHash)
-            put("quickforward","yes")
-            put("handlekey","ls")
-        }
+        val loginFormBody = FormBody.Builder()
+            .add("fastloginfield", "username")
+            .add("username", username)
+            .add("password", password)
+            .add("formhash", formHash)
+            .add("quickforward", "yes")
+            .add("handlekey", "ls")
+            .build()
         val request = Request.Builder()
             .url(loginURL)
-            .post(jsonObject.toString().toRequestBody())
+            .post(loginFormBody)
             .build()
 
         session.newCall(request).execute().use { response ->
@@ -128,6 +139,7 @@ class ForumServiceImpl(
                     throw BusinessException(code = 500, message = "登录失败，账号或密码错误")
                 } else {
                     //挂起当前调用，避免阻塞整个process线程
+                    logger.info("登录成功: 账号 $username,响应信息: $body")
                     return withContext(Dispatchers.IO){
                         session
                     }
@@ -153,13 +165,14 @@ class ForumServiceImpl(
             }
         }
 
-        val loginForm = buildJsonObject {
-            put("formhash", formHash)
-            put("qdxq", "kx")
-        }
+
+        val loginForm = FormBody.Builder()
+            .add("formhash", formHash)
+            .add("qdxq", "kx").build()
+
         val loginRequest = Request.Builder()
             .url(signURL)
-            .post(loginForm.toString().toRequestBody())
+            .post(loginForm)
             .build()
 
         client.newCall(loginRequest).execute().use { response ->
@@ -179,6 +192,13 @@ class ForumServiceImpl(
 
 
 
+    }
+
+    override suspend fun addAccount(account: ForumAccount): Boolean {
+        logger.info("添加账号: $account")
+        return withContext(Dispatchers.IO){
+            this@ForumServiceImpl.save( account)
+        }
     }
 
     private fun getFormHash(body: InputStream):String{
