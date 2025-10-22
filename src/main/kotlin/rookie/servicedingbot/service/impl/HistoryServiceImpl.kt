@@ -42,4 +42,12 @@ class HistoryServiceImpl(
 
         return res
     }
+
+    override fun addHistory(key: String, value: String): Boolean {
+        return redisTemplate.opsForList().rightPush(key, value)!! > 0
+    }
+
+    override fun deleteHistory(key: String): Boolean {
+        return redisTemplate.delete(key)
+    }
 }

@@ -1,6 +1,8 @@
 package rookie.servicedingbot.model.bo
 
 data class ReplyAgentInput(
+
+    var model: String,
     //用户原始消息
     var originalMessage: String,
 
@@ -9,6 +11,11 @@ data class ReplyAgentInput(
     //需求执行结果
     val processDescription: String,
 
-    val isSampleChat: Boolean
+    var isSampleChat: Boolean,
+
+    //历史消息
+    var historyMessage: List<String>,
+
+    var isHalfway: Boolean,
 
 )

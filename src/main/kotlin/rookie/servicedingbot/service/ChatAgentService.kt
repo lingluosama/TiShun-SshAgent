@@ -19,22 +19,17 @@ interface ChatAgentService {
     suspend fun sampleChat(form: SampleChatForm): Flux<String>
 
     //分析聊天的输入，并决策下一步agent调用
-    @AgentExceptionRetry(retryFor = ServerException::class, retryInterval = 1000L)
     suspend fun planningAgent(input: PlanningAgentInput): PlanningAgentOutput
 
     //调用其他执行者agent，并不断自修正调用链
-    @AgentExceptionRetry(retryFor = ServerException::class, retryInterval = 1000L)
     suspend fun evaluateAgent(input: EvaluateAgentInput): EvaluateAgentOutput
 
     //执行命令并总结执行结果，交给评估agent
-    @AgentExceptionRetry(retryFor = ServerException::class, retryInterval = 1000L)
     suspend fun sshHandlerAgent(input: SshAgentInput): SshAgentOutput
 
     //总结任务结果，并根据设定发送消息给用户
-    @AgentFluxExceptionRetry(retryFor = ServerException::class, retryInterval = 5000L)
     suspend fun replyAgent(input: ReplyAgentInput): Flux<String>
 
     //评估agent递归调用
-    @AgentFluxExceptionRetry(retryFor = ServerException::class, retryInterval = 5000L)
-    suspend fun driveEvaluationChain(input: EvaluateAgentInput): Flux<String>
+    suspend fun driveEvaluationChain(input: EvaluateAgentInput,depth: Int,conversionId: String?,isGroupChat: Boolean?): Flux<String>
 }

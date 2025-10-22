@@ -8,12 +8,9 @@ import com.mybatisflex.spring.service.impl.ServiceImpl
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.java.net.cookiejar.JavaNetCookieJar
 import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
@@ -23,7 +20,7 @@ import rookie.servicedingbot.mapper.ForumAccountMapper
 import rookie.servicedingbot.model.consts.BusinessException
 import rookie.servicedingbot.model.entity.ForumAccount
 import rookie.servicedingbot.service.ForumService
-import rookie.servicedingbot.utils.SimpleMessageSender
+import rookie.servicedingbot.utils.DingtalkUtils
 import java.io.InputStream
 import rookie.servicedingbot.model.entity.table.ForumAccountTableDef.FORUM_ACCOUNT
 import java.net.CookieManager
@@ -33,7 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger
 @Service
 class ForumServiceImpl(
     val okHttpClient: OkHttpClient,
-    val simpleMessageSender: SimpleMessageSender
+    val simpleMessageSender: DingtalkUtils
 ) : ServiceImpl<ForumAccountMapper, ForumAccount>(), ForumService{
 
 
@@ -179,10 +176,10 @@ class ForumServiceImpl(
             if (response.isSuccessful) {
                 val body = response.body.string()
                 if (body.contains("签到成功")) {
-                    simpleMessageSender.send(body)
+                    simpleMessageSender.fastMessageSendWithCallBackUrl(body)
                     return withContext(Dispatchers.IO){true}
                 } else {
-                    simpleMessageSender.send(body)
+                    simpleMessageSender.fastMessageSendWithCallBackUrl(body)
                     return withContext(Dispatchers.IO){false}
                 }
             } else {

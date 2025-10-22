@@ -22,7 +22,7 @@ class AgentAopImpl() {
     }
 
     @Around("@annotation(agentFluxExceptionRetry)")
-    fun retryForFlux(joinPoint: ProceedingJoinPoint, agentFluxExceptionRetry: AgentFluxExceptionRetry): Any? {
+    suspend fun retryForFlux(joinPoint: ProceedingJoinPoint, agentFluxExceptionRetry: AgentFluxExceptionRetry): Any? {
         val result = joinPoint.proceed()
 
         if(result is Flux<*>) {

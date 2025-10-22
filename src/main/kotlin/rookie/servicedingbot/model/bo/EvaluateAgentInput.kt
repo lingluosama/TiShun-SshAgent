@@ -1,6 +1,8 @@
 package rookie.servicedingbot.model.bo
 
 data class EvaluateAgentInput(
+
+    var model: String,
     //用户事件
     var event: String,
 
@@ -23,5 +25,10 @@ data class EvaluateAgentInput(
 
     //用户原始消息
     var originalMessage: String,
+
+    //历史消息
+    var historyMessage: List<String>,
+
+    var depth: Int
 
     )

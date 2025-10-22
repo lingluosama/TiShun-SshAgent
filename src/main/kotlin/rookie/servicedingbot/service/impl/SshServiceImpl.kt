@@ -17,22 +17,42 @@ import rookie.servicedingbot.service.SshService
 import java.security.PublicKey
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.math.sin
 
+@OptIn(ExperimentalAtomicApi::class)
 @Service
 class SshServiceImpl(
     private val connectionDetails: SshConfig.SshConnectionDetails
 ) : SshService, CoroutineScope by CoroutineScope(Dispatchers.IO) {
 
+    @OptIn(ExperimentalAtomicApi::class)
+    private val clientRef: AtomicReference<SSHClient?> = AtomicReference(null)
+
+
     companion object{
       val logger = LoggerFactory.getLogger(SshServiceImpl::class.java)
     }
-
 
     private val cachedClient= CompletableFuture.supplyAsync {
         try {
             return@supplyAsync this.connect()
         }catch (e: Exception){
             throw RuntimeException("Initial SSH connection failed", e)
+        }
+    }
+
+    init {
+        launch {
+            try {
+                val initialClient = withContext(Dispatchers.IO) {
+                    connect()
+                }
+                clientRef.store(initialClient)
+            } catch (e: Exception) {
+                logger.error("Initial SSH connection failed", e)
+            }
         }
     }
 
@@ -50,19 +70,18 @@ class SshServiceImpl(
     }
 
     override suspend fun getClient(): SSHClient {
-        val client = cachedClient.get()
-
+        val client =clientRef.load()
         //先从缓存拿连接
-        if (!client.isConnected || !client.isAuthenticated) {
-            println("SSH Client disconnected, attempting to reconnect...")
+        if (client==null||!client.isConnected || !client.isAuthenticated) {
+            logger.info("SSH连接断开，重新建立连接...")
             try {
                 // 确保旧连接被清理
-                client.disconnect()
+                client?.disconnect()
             } catch (ignore: Exception) { }
 
             // 重新创建并替换缓存
             val newClient = this.connect()
-            cachedClient.complete(newClient)
+            clientRef.store(newClient)
             return withContext(Dispatchers.IO){
               newClient
             }
@@ -76,6 +95,7 @@ class SshServiceImpl(
         val client = getClient()
         return Flux.create { sink ->
             this.launch {
+                var session: net.schmizz.sshj.connection.channel.direct.Session? = null // 声明 session
                 try {
                     val session = client.startSession()
                     val cmd = session.exec(command)
@@ -92,7 +112,7 @@ class SshServiceImpl(
 
                     if(exitStatus!=0){
                         val errorOutPut = cmd.errorStream.bufferedReader().readText()
-                        sink.error(BusinessException( "命令执行失败"))
+                        sink.error(BusinessException( "命令执行失败,返回信息:${errorOutPut}"))
 
                     }else{
                         sink.complete()
@@ -103,7 +123,7 @@ class SshServiceImpl(
                 }catch (e: Exception){
                     sink.error(e)
                 }finally {
-                    client.disconnect()
+                    session?.close()
                 }
             }
         }

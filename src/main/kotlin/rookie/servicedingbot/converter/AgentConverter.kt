@@ -27,7 +27,10 @@ class AgentConverter {
             suggestionFromSShAgent = "",
             processSummary = "",
             demand = output.demand,
-            originalMessage = ""
+            originalMessage = "",
+            historyMessage = emptyList(),
+            model = "gemini-2.5-flash",
+            depth = 0
         )
     }
 
@@ -38,7 +41,10 @@ class AgentConverter {
             originalMessage = "",
             executionChain = output.executionChain,
             processDescription = "",
-            isSampleChat = true
+            isSampleChat = true,
+            historyMessage = emptyList(),
+            model = "gemini-2.5-flash",
+            isHalfway = false
         )
     }
 
@@ -49,7 +55,8 @@ class AgentConverter {
             demand = output.demand,
             command = output.nextCommand,
             originalDemand = null,
-            commandExecutionResult = ""
+            commandExecutionResult = "",
+            model = "gemini-2.5-flash"
         )
     }
 
@@ -64,7 +71,10 @@ class AgentConverter {
             suggestionFromSShAgent = output.suggestion,
             processSummary = "",
             demand = "",
-            originalMessage = ""
+            originalMessage = "",
+            model = "gemini-2.5-flash",
+            historyMessage = emptyList(),
+            depth = 0
         )
     }
 
@@ -74,7 +84,10 @@ class AgentConverter {
             originalMessage = "",
             executionChain = output.executionChain,
             processDescription = output.processDescription,
-            isSampleChat = false
+            isSampleChat = false,
+            historyMessage = emptyList(),
+            model = "gemini-2.5-flash",
+            isHalfway = false
         )
     }
 }

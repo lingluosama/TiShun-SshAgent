@@ -1,26 +1,19 @@
 package rookie.servicedingbot.config
 
-import com.aliyun.dingtalkoauth2_1_0.models.GetAccessTokenRequest
-import com.aliyun.dingtalkrobot_1_0.models.OrgGroupSendHeaders
-import com.aliyun.dingtalkrobot_1_0.models.OrgGroupSendRequest
-import com.aliyun.tea.TeaException
-import com.aliyun.teaopenapi.models.Config
-import com.aliyun.teautil.models.RuntimeOptions
 import com.dingtalk.open.app.api.OpenDingTalkClient
 import com.dingtalk.open.app.api.OpenDingTalkStreamClientBuilder
 import com.dingtalk.open.app.api.security.AuthClientCredential
-import kotlinx.serialization.json.JsonObject
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import rookie.servicedingbot.model.form.DingTalkMessage
-import rookie.servicedingbot.service.impl.DingBotMessageConsumer
+import rookie.servicedingbot.controller.DingBotMessageHandler
 import shade.com.alibaba.fastjson2.JSONObject
 
 @Configuration
 class DingtalkStreamConfig(
-    val dingBotMessageConsumer: DingBotMessageConsumer
+    val dingBotMessageConsumer: DingBotMessageHandler
 ) {
     @Value("\${dingtalk.app.SuiteKey}")
     lateinit var suiteKey: String
