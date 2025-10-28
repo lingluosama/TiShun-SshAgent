@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component
 import rookie.servicedingbot.function.ToolManager
 import rookie.servicedingbot.model.bo.EvaluateAgentInput
 import rookie.servicedingbot.model.bo.EvaluateAgentOutput
+import rookie.servicedingbot.model.bo.MonitorAgentInput
 import rookie.servicedingbot.model.bo.PlanningAgentOutput
 import rookie.servicedingbot.model.bo.ReplyAgentInput
 import rookie.servicedingbot.model.bo.SshAgentInput
@@ -30,7 +31,7 @@ class AgentConverter(
             suggestionFromSShAgent = "",
             processSummary = "",
             demand = output.demand,
-            originalMessage = "",
+            originalUserMessage = "",
             historyMessage = emptyList(),
             model = "gemini-2.5-flash",
             depth = 0,
@@ -74,7 +75,7 @@ class AgentConverter(
             suggestionFromSShAgent = "",
             processSummary = output.processSummary,
             demand = output.demand,
-            originalMessage = "",
+            originalUserMessage = "",
             model = "gemini-2.5-flash",
             historyMessage = emptyList(),
             depth = 0,
@@ -94,7 +95,7 @@ class AgentConverter(
             suggestionFromSShAgent = output.suggestion,
             processSummary = "",
             demand = "",
-            originalMessage = "",
+            originalUserMessage = "",
             model = "gemini-2.5-flash",
             historyMessage = emptyList(),
             depth = 0,
@@ -116,4 +117,15 @@ class AgentConverter(
             isHalfway = false,
         )
     }
+    fun evaluateOutputToMonitorInput(output: EvaluateAgentOutput): MonitorAgentInput {
+        return MonitorAgentInput(
+            currentDemand = output.demand,
+            collectedInsights = mutableListOf(),
+            processSummary = output.processSummary,
+            model = "gemini-2.5-flash",
+            originalUserMessage ="",
+        )
+    }
+
+
 }

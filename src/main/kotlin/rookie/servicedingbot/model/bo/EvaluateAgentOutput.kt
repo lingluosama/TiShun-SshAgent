@@ -3,7 +3,7 @@ package rookie.servicedingbot.model.bo
 data class EvaluateAgentOutput (
 
     //对于执行者的需求描述
-    val demand:String,
+    var demand:String,
 
     //执行链应对下发的agent不可见，只传递给执行者agent需要知道的指令
     val nextCommand: String,
@@ -28,6 +28,6 @@ data class EvaluateAgentOutput (
     //需要记录的有价值的信息
     var newInsight: String? = null,
 
-){
+    ){
 
 }

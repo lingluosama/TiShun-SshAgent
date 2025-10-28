@@ -93,7 +93,7 @@ class ChatAgentServiceImpl(
         val evaluateInput = agentConverter.planOutputToEvaluateInput(planningOutput)
         evaluateInput.historyMessage=input.historyMessage
         evaluateInput.model=input.model
-        evaluateInput.originalMessage=input.userInput
+        evaluateInput.originalUserMessage=input.userInput
         return this.driveEvaluationChain(evaluateInput,1,conversionKey,isGroupChat)
     }
 
@@ -127,10 +127,15 @@ class ChatAgentServiceImpl(
             val cleanJson = contentText?.let { cleanModelOutputJson(it) }
             val output = JSON.parseObject(cleanJson, EvaluateAgentOutput::class.java)
 
+
+            if(!output.newInsight.isNullOrBlank()){
+                input.collectedInsights.add(output.newInsight!!)
+            }
+
             // 检查流程是否结束
             if(output.isPlanToReply||deepth>16){
                 val replyInput = agentConverter.evaluateOutputToReplyInput(output)
-                replyInput.originalMessage = input.originalMessage // 确保原始消息上下文传递
+                replyInput.originalMessage = input.originalUserMessage // 确保原始消息上下文传递
                 replyInput.historyMessage = input.historyMessage
                 replyInput.model=input.model
                 replyInput.collectedInsights=input.collectedInsights
@@ -139,6 +144,48 @@ class ChatAgentServiceImpl(
                 }
                 return this.replyAgent(replyInput)
             }
+
+            var evaluationNeedCorrect = false
+            // 每4次汇报进度或检查是否需要提交回复
+            if (deepth % 4 == 0 && deepth > 0&&conversionId!=null&&isGroupChat!=null) {
+                val monitorInput = agentConverter.evaluateOutputToMonitorInput(output)
+
+                val monitorAgentOutPut = this.monitorAgent(monitorInput)
+
+                val replyInput = agentConverter.evaluateOutputToReplyInput(output)
+                replyInput.originalMessage = input.originalUserMessage
+                replyInput.historyMessage = input.historyMessage
+                replyInput.model = input.model
+                replyInput.isHalfway=!monitorAgentOutPut.shouldReply
+                replyInput.collectedInsights=input.collectedInsights
+
+                val feedbackFlux: Flux<String> = replyAgent(replyInput)
+
+
+                if(monitorAgentOutPut.needCorrect){
+                    output.demand=monitorAgentOutPut.revisedRequirements
+                    evaluationNeedCorrect=true
+                }
+
+                //调用replyAgent总结目前操作或者直接返回
+                if(monitorAgentOutPut.shouldReply){
+                    return feedbackFlux
+                }
+                else if(isGroupChat){
+                    val feedbackResult: String = feedbackFlux
+                        .reduce("") { acc, item -> acc + item }
+                        .awaitSingle()
+                    dingtalkUtils.fastMessageSendWithCallBackUrl(feedbackResult)
+                }else{
+                    val feedbackResult: String = feedbackFlux
+                        .reduce("") { acc, item -> acc + item }
+                        .awaitSingle()
+                    dingtalkUtils.fastMessageSendToUser(feedbackResult,conversionId)
+                }
+
+            }
+
+
 
             var sshAgentOutput: SshAgentOutput= SshAgentOutput(
                 "",
@@ -171,13 +218,11 @@ class ChatAgentServiceImpl(
                 }
             }
 
-            if(!output.newInsight.isNullOrBlank()){
-                input.collectedInsights.add(output.newInsight!!)
-            }
 
             // 准备下一轮 Evaluate Agent 的输入
             val nextInput = agentConverter.sshOutputToEvaluateInput(sshAgentOutput)
-            nextInput.originalMessage = input.originalMessage
+            nextInput.needCorrect=evaluationNeedCorrect
+            nextInput.originalUserMessage = input.originalUserMessage
             nextInput.demand = output.demand
             nextInput.event = input.event
             nextInput.collectedInsights = input.collectedInsights
@@ -188,42 +233,28 @@ class ChatAgentServiceImpl(
             nextInput.preToolCallResult = toolCallExecuteResult
 
 
-
-            // 每4次反馈一次结果
-            if (deepth % 4 == 0 && deepth > 0&&conversionId!=null&&isGroupChat!=null) {
-                logger.info("【评估 Agent】流程深度 {}, 执行中途进度汇报...", deepth)
-
-                val replyInput = agentConverter.evaluateOutputToReplyInput(output)
-                replyInput.originalMessage = input.originalMessage
-                replyInput.historyMessage = input.historyMessage
-                replyInput.model = input.model
-                replyInput.isHalfway=true
-                replyInput.collectedInsights=input.collectedInsights
-
-                val feedbackFlux: Flux<String> = replyAgent(replyInput)
-
-                val feedbackResult: String = feedbackFlux
-                    .reduce("") { acc, item -> acc + item }
-                    .awaitSingle() // 挂起协程，等待 Flux 完成并返回最终的聚合结果
-
-
-                //调用replyAgent总结目前操作
-                if(isGroupChat){
-                    dingtalkUtils.fastMessageSendWithCallBackUrl(feedbackResult)
-                }else{
-                    dingtalkUtils.fastMessageSendToUser(feedbackResult,conversionId)
-                }
-
-            }
-
-
-
             return this.driveEvaluationChain(nextInput, deepth + 1,conversionId,isGroupChat)
 
         }catch (e: Exception){
             logger.error("【评估 Agent】API 执行失败，错误信息: {}", e.message)
             throw e
         }
+    }
+
+    override suspend fun monitorAgent(input: MonitorAgentInput): MonitorAgentOutPut {
+        val inputString = JSON.toJSONString(input)
+        val client = getLLMClient(input.model)
+        try {
+            val contentText = client.chatCompletion(input.model, inputString, SystemAgentCharacters.MONITOR_AGENT)
+            logger.info("【监控 Agent】API 执行成功，原始返回:\n{}", contentText)
+            return JSON.parseObject(contentText, MonitorAgentOutPut::class.java)
+
+
+        } catch (e: Exception) {
+            logger.error("【监控 Agent】API 执行失败，错误信息: {}", e.message)
+            throw e
+        }
+
     }
 
     override suspend fun evaluateAgent(input: EvaluateAgentInput): EvaluateAgentOutput {
@@ -248,13 +279,13 @@ class ChatAgentServiceImpl(
                 nextInput.model=input.model
                 nextInput.executionChain=output.executionChain
                 nextInput.processSummary=output.processSummary
-                nextInput.originalMessage = input.originalMessage
+                nextInput.originalUserMessage = input.originalUserMessage
 
 
                 self.evaluateAgent(nextInput)
             }else{
                 val replyInput = agentConverter.evaluateOutputToReplyInput(output)
-                replyInput.originalMessage = input.originalMessage
+                replyInput.originalMessage = input.originalUserMessage
                 replyInput.historyMessage = input.historyMessage
                 self.replyAgent(replyInput)
             }

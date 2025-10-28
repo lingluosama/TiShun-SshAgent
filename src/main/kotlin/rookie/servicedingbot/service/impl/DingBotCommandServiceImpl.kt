@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import reactor.core.publisher.Flux
+import rookie.servicedingbot.consumer.ChatQueueConsumer
 import rookie.servicedingbot.model.form.DingTalkMessage
 import rookie.servicedingbot.model.form.SampleChatForm
 import rookie.servicedingbot.service.ChatAgentService
@@ -34,7 +35,8 @@ class DingBotCommandServiceImpl(
     val historyService: HistoryService,
     val chatAgentService: ChatAgentService,
     val jsonSerializer: Json,
-    val redissonClient: RedissonClient
+    val redissonClient: RedissonClient,
+    val chatQueueConsumer: ChatQueueConsumer
 ) : DingBotCommandService {
 
     companion object {
@@ -66,6 +68,11 @@ class DingBotCommandServiceImpl(
         private const val CHAT_LOCK_TIMEOUT_SECONDS: Long = -1
         val chatIsBusy ="主人，我还在正在处理中，等在下一下吧QAQ"
 
+        //聊天队列名称
+        private val CHAT_QUEUE_NAME = "chatting:processing_queue"
+        //聊天限流信号Key
+        private val CHAT_SEMAPHORE_NAME = "chatting:global_limit"
+
     }
 
     @Value("\${dingtalk.app.SuiteKey}")
@@ -77,6 +84,80 @@ class DingBotCommandServiceImpl(
     @Value("\${dingtalk.app.topic}")
     var topic: String="/v1.0/im/bot/messages/get"
     var currentModel="deepseek-chat"
+//    override fun chatWithAgent(message: DingTalkMessage): JSONObject {
+//        val userId = message.senderStaffId.toString()
+//        val userMessage = message.text.content
+//        val conversationId = message.conversationId
+//        val robotCode = message.robotCode
+//        val replay = JSONObject()
+//
+//        val historyKey=if(message.conversationType!="1")conversationId else userId
+//
+//        val chatLock = redissonClient.getLock("chatting:$historyKey")
+//        val isGetLock = chatLock.tryLock(CHAT_LOCK_WAITING_SECONDS, CHAT_LOCK_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+//
+//
+//        val chatForm = SampleChatForm(
+//            model = currentModel,
+//            userMessage,
+//            historyKey,
+//            message.conversationType!="1"
+//            )
+//
+//        try {
+//            if(isGetLock){
+//                val chatReply = runBlocking {
+//                    val flux: Flux<String> = chatAgentService.sampleChat(chatForm)
+//
+//                    flux
+//                        .map { it.trim() }
+//                        .reduce (""){ accumulator, item -> accumulator + item }
+//                        .block(Duration.ofSeconds(120))
+//                        ?: "" // 如果返回 null，则使用空字符串
+//                }
+//                replay["content"] = chatReply
+//
+//                //存入消息历史
+//                val historyJson = buildJsonObject {
+//                    put("userMessage", userMessage)
+//                    put("agentReply", chatReply)
+//                }
+//                val historyJsonString = jsonSerializer.encodeToString(JsonObject.serializer(), historyJson)
+//
+//                if(!chatReply.isEmpty())historyService.addHistory(conversationId,historyJsonString)
+//            }else{
+//                replay["content"] =chatIsBusy
+//            }
+//        }catch (e: Exception){
+//            replay["content"] = "对不起老公我鼠了:${e.message}"
+//        }catch (e: IllegalMonitorStateException){
+//            replay["content"] =chatIsBusy
+//        }finally {
+//            if(chatLock.isHeldByCurrentThread)
+//                chatLock.unlock()
+//        }
+//        val config = Config()
+//        config.protocol = "https"
+//        config.regionId = "central"
+//        try {
+//            return when (message.conversationType) {
+//                "1" -> sendSingleMessage(robotCode, userId,replay.toJSONString()) // 群聊
+//                "2" -> sendGroupMessage(robotCode, conversationId,replay.toJSONString())      // 单聊
+//                else -> {
+//                    logger.warn("未知的会话类型: {}", message.conversationType)
+//                    JSONObject()
+//                }
+//            }
+//        } catch (e: TeaException) {
+//            logger.error("机器人API交互错误, errCode={}, errorMessage={}", e.getCode(), e.message, e)
+//            throw e
+//        } catch (e: Exception) {
+//            logger.error("机器人消息发送业务异常, errorMessage={}", e.message, e)
+//            throw e
+//        }
+//
+//    }
+
     override fun chatWithAgent(message: DingTalkMessage): JSONObject {
         val userId = message.senderStaffId.toString()
         val userMessage = message.text.content
@@ -86,52 +167,23 @@ class DingBotCommandServiceImpl(
 
         val historyKey=if(message.conversationType!="1")conversationId else userId
 
-        val chatLock = redissonClient.getLock("chatting:$historyKey")
-        val isGetLock = chatLock.tryLock(CHAT_LOCK_WAITING_SECONDS, CHAT_LOCK_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-
-
         val chatForm = SampleChatForm(
             model = currentModel,
             userMessage,
             historyKey,
             message.conversationType!="1"
-            )
-
-        try {
-            if(isGetLock){
-                val chatReply = runBlocking {
-                    val flux: Flux<String> = chatAgentService.sampleChat(chatForm)
-
-                    flux
-                        .map { it.trim() }
-                        .reduce (""){ accumulator, item -> accumulator + item }
-                        .block(Duration.ofSeconds(120))
-                        ?: "" // 如果返回 null，则使用空字符串
-                }
-                replay["content"] = chatReply
-
-                //存入消息历史
-                val historyJson = buildJsonObject {
-                    put("userMessage", userMessage)
-                    put("agentReply", chatReply)
-                }
-                val historyJsonString = jsonSerializer.encodeToString(JsonObject.serializer(), historyJson)
-
-                if(!chatReply.isEmpty())historyService.addHistory(conversationId,historyJsonString)
-            }else{
-                replay["content"] =chatIsBusy
-            }
-        }catch (e: Exception){
-            replay["content"] = "对不起老公我鼠了:${e.message}"
-        }catch (e: IllegalMonitorStateException){
-            replay["content"] =chatIsBusy
-        }finally {
-            if(chatLock.isHeldByCurrentThread)
-                chatLock.unlock()
+        )
+        val queueInput = buildJsonObject {
+            put("chatForm", JSONObject.toJSONString(chatForm))
+            put("conversationId", conversationId)
+            put("robotCode", robotCode)
+            put("userId", userId)
+            put("isGroupChat", message.conversationType != "1")
         }
-        val config = Config()
-        config.protocol = "https"
-        config.regionId = "central"
+        val inputString = jsonSerializer.encodeToString(JsonObject.serializer(), queueInput)
+        val queue = redissonClient.getBlockingQueue<String>(CHAT_QUEUE_NAME)
+        queue.offer(inputString)
+        replay["content"]="ack=1,queueSize:${queue.size}"
         try {
             return when (message.conversationType) {
                 "1" -> sendSingleMessage(robotCode, userId,replay.toJSONString()) // 群聊

@@ -1,7 +1,6 @@
 package rookie.servicedingbot.model.bo
 
 import rookie.servicedingbot.function.LlmFunction
-import rookie.servicedingbot.function.Tool
 
 data class EvaluateAgentInput(
 
@@ -27,7 +26,7 @@ data class EvaluateAgentInput(
     var demand:String,
 
     //用户原始消息
-    var originalMessage: String,
+    var originalUserMessage: String,
 
     //历史消息
     var historyMessage: List<String> =emptyList(),
@@ -41,6 +40,8 @@ data class EvaluateAgentInput(
     var preToolCallResult: Map<String, String> =emptyMap(),
 
     // Agent 迄今为止收集到的关键情报和洞察
-    var collectedInsights: MutableCollection<String> = mutableListOf()
+    var collectedInsights: MutableCollection<String> = mutableListOf(),
 
+    //是否需要立即修正
+    var needCorrect: Boolean=false
 )

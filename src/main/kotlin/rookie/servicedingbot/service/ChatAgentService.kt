@@ -6,6 +6,8 @@ import rookie.servicedingbot.aop.annotation.AgentExceptionRetry
 import rookie.servicedingbot.aop.annotation.AgentFluxExceptionRetry
 import rookie.servicedingbot.model.bo.EvaluateAgentInput
 import rookie.servicedingbot.model.bo.EvaluateAgentOutput
+import rookie.servicedingbot.model.bo.MonitorAgentInput
+import rookie.servicedingbot.model.bo.MonitorAgentOutPut
 import rookie.servicedingbot.model.bo.PlanningAgentInput
 import rookie.servicedingbot.model.bo.PlanningAgentOutput
 import rookie.servicedingbot.model.bo.ReplyAgentInput
@@ -33,5 +35,6 @@ interface ChatAgentService {
     //评估agent递归调用
     suspend fun driveEvaluationChain(input: EvaluateAgentInput,depth: Int,conversionId: String?,isGroupChat: Boolean?): Flux<String>
 
-    suspend fun monitorAgent()
+    //监控递归调用是否已经达到要求，执行返回
+    suspend fun monitorAgent(input: MonitorAgentInput): MonitorAgentOutPut
 }
