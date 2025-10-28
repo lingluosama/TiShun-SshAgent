@@ -1,6 +1,7 @@
 package rookie.servicedingbot.converter
 
 import org.springframework.stereotype.Component
+import rookie.servicedingbot.function.ToolManager
 import rookie.servicedingbot.model.bo.EvaluateAgentInput
 import rookie.servicedingbot.model.bo.EvaluateAgentOutput
 import rookie.servicedingbot.model.bo.PlanningAgentOutput
@@ -10,7 +11,9 @@ import rookie.servicedingbot.model.bo.SshAgentOutput
 
 
 @Component
-class AgentConverter {
+class AgentConverter(
+    val toolManager: ToolManager
+) {
 
     /**
      * 将 PlanningAgentOutput 转换为 EvaluateAgentInput。
@@ -30,7 +33,9 @@ class AgentConverter {
             originalMessage = "",
             historyMessage = emptyList(),
             model = "gemini-2.5-flash",
-            depth = 0
+            depth = 0,
+            tools = toolManager.getToolsInfo(),
+            preToolCallResult =emptyMap()
         )
     }
 
@@ -59,6 +64,24 @@ class AgentConverter {
             model = "gemini-2.5-flash"
         )
     }
+    
+    fun evaluateOutPutToEvaluateInput(output: EvaluateAgentOutput): EvaluateAgentInput {
+        return EvaluateAgentInput(
+            event = "",
+            executionChain = output.executionChain,
+            previousExecution = "",
+            previousResult = "",
+            suggestionFromSShAgent = "",
+            processSummary = output.processSummary,
+            demand = output.demand,
+            originalMessage = "",
+            model = "gemini-2.5-flash",
+            historyMessage = emptyList(),
+            depth = 0,
+            tools = toolManager.getToolsInfo(),
+            preToolCallResult = emptyMap(),
+        )
+    }
 
 
 
@@ -74,7 +97,10 @@ class AgentConverter {
             originalMessage = "",
             model = "gemini-2.5-flash",
             historyMessage = emptyList(),
-            depth = 0
+            depth = 0,
+            tools = toolManager.getToolsInfo(),
+            preToolCallResult = emptyMap(),
+            collectedInsights = mutableListOf(),
         )
     }
 
@@ -87,7 +113,7 @@ class AgentConverter {
             isSampleChat = false,
             historyMessage = emptyList(),
             model = "gemini-2.5-flash",
-            isHalfway = false
+            isHalfway = false,
         )
     }
 }

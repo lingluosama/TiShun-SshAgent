@@ -24,6 +24,7 @@ class Deepseek(
 
         val request = ChatCompletionRequest.builder()
             .model(model)
+            .temperature(0.5)
             .addSystemMessage(characters.agentInstructionText)//设定插入
             .addUserMessage(prompt)
             .build()
@@ -56,6 +57,7 @@ class Deepseek(
     ): String {
         val request = ChatCompletionRequest.builder()
             .model(model)
+            .temperature(0.5)
             .addUserMessage(characters.agentInstructionText)//设定插入
             .addUserMessage(prompt)
             .build()

@@ -1,5 +1,8 @@
 package rookie.servicedingbot.model.bo
 
+import rookie.servicedingbot.function.LlmFunction
+import rookie.servicedingbot.function.Tool
+
 data class EvaluateAgentInput(
 
     var model: String,
@@ -7,7 +10,7 @@ data class EvaluateAgentInput(
     var event: String,
 
     //执行计划链(命令列表)
-    var executionChain: List<String>,
+    var executionChain: List<String> =emptyList(),
 
     //上一次执行项
     val previousExecution: String,
@@ -27,8 +30,17 @@ data class EvaluateAgentInput(
     var originalMessage: String,
 
     //历史消息
-    var historyMessage: List<String>,
+    var historyMessage: List<String> =emptyList(),
 
-    var depth: Int
+    var depth: Int,
 
-    )
+    //Agent 可用工具
+    var tools: Map<String, LlmFunction> =emptyMap(),
+
+    //上次工具调用结果
+    var preToolCallResult: Map<String, String> =emptyMap(),
+
+    // Agent 迄今为止收集到的关键情报和洞察
+    var collectedInsights: MutableCollection<String> = mutableListOf()
+
+)

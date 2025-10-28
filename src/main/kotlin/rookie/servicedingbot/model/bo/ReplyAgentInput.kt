@@ -9,7 +9,7 @@ data class ReplyAgentInput(
     //经历的执行链
     val executionChain: List<String>,
     //需求执行结果
-    val processDescription: String,
+    var processDescription: String,
 
     var isSampleChat: Boolean,
 
@@ -18,4 +18,7 @@ data class ReplyAgentInput(
 
     var isHalfway: Boolean,
 
-)
+    // Agent 迄今为止收集到的关键情报和洞察
+    var collectedInsights: MutableCollection<String> = mutableListOf()
+
+    )

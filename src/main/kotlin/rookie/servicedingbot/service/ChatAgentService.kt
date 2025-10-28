@@ -32,4 +32,6 @@ interface ChatAgentService {
 
     //评估agent递归调用
     suspend fun driveEvaluationChain(input: EvaluateAgentInput,depth: Int,conversionId: String?,isGroupChat: Boolean?): Flux<String>
+
+    suspend fun monitorAgent()
 }

@@ -18,9 +18,15 @@ data class EvaluateAgentOutput (
     val processSummary: String,
 
     //执行计划链(命令列表)
-    var executionChain: List<String>,
+    var executionChain: List<String> =emptyList(),
 
     val nextAgent: String,
+
+    var toolCall: List<ToolCall> =emptyList(),
+
+
+    //需要记录的有价值的信息
+    var newInsight: String? = null,
 
 ){
 

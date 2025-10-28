@@ -3,7 +3,6 @@ package rookie.servicedingbot.service.impl
 import com.google.genai.Client
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.withContext
 import org.redisson.api.RedissonClient
@@ -12,6 +11,7 @@ import org.springframework.context.annotation.Lazy
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import rookie.servicedingbot.converter.AgentConverter
+import rookie.servicedingbot.function.ToolManager
 import rookie.servicedingbot.llmClient.LLMClient
 import rookie.servicedingbot.model.bo.*
 import rookie.servicedingbot.model.consts.BusinessException
@@ -23,7 +23,6 @@ import rookie.servicedingbot.service.SshService
 import rookie.servicedingbot.utils.DingtalkUtils
 import shade.com.alibaba.fastjson2.JSON
 import java.time.Duration
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
 @Service
@@ -35,7 +34,8 @@ class ChatAgentServiceImpl(
     @Lazy private val self: ChatAgentService,
     val historyService: HistoryService,
     val redissonClient: RedissonClient,
-    val dingtalkUtils: DingtalkUtils
+    val dingtalkUtils: DingtalkUtils,
+    val toolManager: ToolManager
 ): ChatAgentService, CoroutineScope by CoroutineScope(Dispatchers.IO) {
 
     companion object{
@@ -71,11 +71,12 @@ class ChatAgentServiceImpl(
 
         val historyMessage = historyService.getRecentHistoryByMemoryLimit(form.conversionId!!, 100)
 
-        val input = PlanningAgentInput(form.content, form.model,historyMessage)
+        val input = PlanningAgentInput(form.content, form.model,historyMessage,toolManager.getToolsInfo())
         return this.startTaskFlow(input,form.conversionId,form.isGroupChat)
     }
 
     private suspend fun startTaskFlow(input: PlanningAgentInput,conversionKey: String?,isGroupChat: Boolean?): Flux<String> {
+        input.tools=toolManager.getToolsInfo()
         val planningOutput = this.planningAgent(input)
 
         // 检查是否决定直接回复
@@ -92,6 +93,7 @@ class ChatAgentServiceImpl(
         val evaluateInput = agentConverter.planOutputToEvaluateInput(planningOutput)
         evaluateInput.historyMessage=input.historyMessage
         evaluateInput.model=input.model
+        evaluateInput.originalMessage=input.userInput
         return this.driveEvaluationChain(evaluateInput,1,conversionKey,isGroupChat)
     }
 
@@ -126,29 +128,66 @@ class ChatAgentServiceImpl(
             val output = JSON.parseObject(cleanJson, EvaluateAgentOutput::class.java)
 
             // 检查流程是否结束
-            if(output.isPlanToReply){
+            if(output.isPlanToReply||deepth>16){
                 val replyInput = agentConverter.evaluateOutputToReplyInput(output)
                 replyInput.originalMessage = input.originalMessage // 确保原始消息上下文传递
                 replyInput.historyMessage = input.historyMessage
                 replyInput.model=input.model
+                replyInput.collectedInsights=input.collectedInsights
+                if(deepth>16){
+                    replyInput.processDescription+="System:Because of evaluationAgent drive recursion over than 17 times,the task has be terminated"
+                }
                 return this.replyAgent(replyInput)
             }
 
-            // 流程继续：调用 SSH
-            val sshInput = agentConverter.evaluateOutputToSshInput(output)
-            sshInput.originalDemand = output.demand // 使用 EvaluateAgent 生成的需求
-            sshInput.model=input.model
-            val sshAgentOutput = self.sshHandlerAgent(sshInput)
+            var sshAgentOutput: SshAgentOutput= SshAgentOutput(
+                "",
+                true,
+                result = "",
+                suggestion = ""
+            )
+            if(output.nextAgent=="sshAgent"){
+                val sshInput = agentConverter.evaluateOutputToSshInput(output)
+                sshInput.originalDemand = output.demand // 使用 EvaluateAgent 生成的需求
+                sshInput.model=input.model
+                sshAgentOutput = self.sshHandlerAgent(sshInput)
+            }
+            val toolCallExecuteResult=mutableMapOf<String, String>()
+            if(!output.toolCall.isEmpty()){
+                output.toolCall.forEach { toolCall ->
+                    val toolFunction = toolManager.getToolByName(toolCall.name)
+                    if(toolFunction==null){
+                        logger.error("【评估 Agent】无法找到工具函数: {}", toolCall.name)
+                        toolCallExecuteResult[toolCall.name] = "无法找到工具函数: ${toolCall.name}"
+                    }else{
+                        try {
+                            val toolResult = toolFunction.execute(toolCall.arguments)
+                            toolCallExecuteResult[toolCall.name] = toolResult.toString()
+                        } catch (e: Exception) {
+                            logger.error("【评估 Agent】工具函数执行失败: {}", e.message)
+                            toolCallExecuteResult[toolCall.name] = "工具函数执行失败: ${e.message}"
+                        }
+                    }
+                }
+            }
+
+            if(!output.newInsight.isNullOrBlank()){
+                input.collectedInsights.add(output.newInsight!!)
+            }
 
             // 准备下一轮 Evaluate Agent 的输入
             val nextInput = agentConverter.sshOutputToEvaluateInput(sshAgentOutput)
             nextInput.originalMessage = input.originalMessage
             nextInput.demand = output.demand
             nextInput.event = input.event
+            nextInput.collectedInsights = input.collectedInsights
             nextInput.executionChain = output.executionChain
             nextInput.processSummary = output.processDescription
             nextInput.historyMessage = input.historyMessage
             nextInput.model=input.model
+            nextInput.preToolCallResult = toolCallExecuteResult
+
+
 
             // 每4次反馈一次结果
             if (deepth % 4 == 0 && deepth > 0&&conversionId!=null&&isGroupChat!=null) {
@@ -159,6 +198,7 @@ class ChatAgentServiceImpl(
                 replyInput.historyMessage = input.historyMessage
                 replyInput.model = input.model
                 replyInput.isHalfway=true
+                replyInput.collectedInsights=input.collectedInsights
 
                 val feedbackFlux: Flux<String> = replyAgent(replyInput)
 
